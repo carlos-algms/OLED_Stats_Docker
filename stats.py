@@ -11,6 +11,31 @@ from time import sleep
 from PIL import Image, ImageDraw, ImageFont
 from os import environ
 from datetime import datetime
+from logging import info as logInfo, INFO, basicConfig
+from sys import exit
+from signal import signal, SIGTERM, SIGINT
+
+basicConfig(
+    format="%(asctime)s %(levelname)-4s %(message)s",
+    level=INFO,
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+
+logInfo("Starting the OLED Stats Display")
+
+
+def terminate(signal, frame):
+    logInfo("Stopping the OLED Stats Display")
+    oled.fill(0)
+    oled.show()
+
+    logInfo("finished")
+    exit(0)
+
+
+signal(SIGTERM, terminate)
+signal(SIGINT, terminate)
+
 
 # Display Parameters
 width = 128
@@ -23,6 +48,7 @@ start = int(environ.get("start") or 8)
 end = int(environ.get("end") or 23)
 current = int(datetime.now().time().strftime("%H"))
 
+logInfo("The display will be on between %s:00 and %s:00", start, end)
 
 # Method to control the display with oled func
 oled = SSD1306_I2C(width, height, I2C(), addr=0x3C, reset=DigitalInOut(D4))
@@ -46,6 +72,31 @@ MemTotal = check_output(
     "cat /proc/meminfo | head -n 1 | awk -v CONVFMT='%.0f' '{printf $2/1000000}'",
     shell=True,
 )
+
+
+def draw_icons():
+    # Icon wifi, chr num comes from unicode &#xf1eb; to decimal 61931 (Use: https://www.binaryhexconverter.com/hex-to-decimal-converter)
+    draw.text(
+        (1, 0), chr(61931), font=icon_font, fill=255
+    )  # Offset the icon on the x-as a little and divide the y-as in steps of 16
+
+    # Icon cpu
+    draw.text((1, 16), chr(62171), font=icon_font, fill=255)
+
+    # Icon temp right
+    draw.text(
+        (111, 16), chr(62153), font=icon_font, fill=255
+    )  # Offset the icon from the left to the farthest right
+
+    # Icon memory
+    draw.text((1, 32), chr(62776), font=icon_font, fill=255)
+
+    # Icon disk
+    draw.text((1, 48), chr(63426), font=icon_font, fill=255)
+
+    # Icon time right
+    draw.text((111, 48), chr(62034), font=icon_font, fill=255)
+
 
 while True:
     while start < current < end:
@@ -86,28 +137,7 @@ while True:
             shell=True,
         )
 
-        # We draw the icons separately and offset by a fixed amount later
-        # Icon wifi, chr num comes from unicode &#xf1eb; to decimal 61931 (Use: https://www.binaryhexconverter.com/hex-to-decimal-converter)
-        draw.text(
-            (1, 0), chr(61931), font=icon_font, fill=255
-        )  # Offset the icon on the x-as a little and divide the y-as in steps of 16
-
-        # Icon cpu
-        draw.text((1, 16), chr(62171), font=icon_font, fill=255)
-
-        # Icon temp right
-        draw.text(
-            (111, 16), chr(62153), font=icon_font, fill=255
-        )  # Offset the icon from the left to the farthest right
-
-        # Icon memory
-        draw.text((1, 32), chr(62776), font=icon_font, fill=255)
-
-        # Icon disk
-        draw.text((1, 48), chr(63426), font=icon_font, fill=255)
-
-        # Icon time right
-        draw.text((111, 48), chr(62034), font=icon_font, fill=255)
+        draw_icons()
 
         # Pi Stats Display, printed from left to right each line
         draw.text(
