@@ -67,12 +67,6 @@ draw = ImageDraw.Draw(image)
 font = ImageFont.truetype("PixelOperator.ttf", font_sz)
 icon_font = ImageFont.truetype("lineawesome-webfont.ttf", font_sz)
 
-# The total memory is constant, so we can fetch it only once
-MemTotal = check_output(
-    "cat /proc/meminfo | head -n 1 | awk -v CONVFMT='%.0f' '{printf $2/1000000}'",
-    shell=True,
-)
-
 
 def draw_icons():
     # Icon wifi, chr num comes from unicode &#xf1eb; to decimal 61931 (Use: https://www.binaryhexconverter.com/hex-to-decimal-converter)
@@ -98,6 +92,20 @@ def draw_icons():
     draw.text((111, 48), chr(62034), font=icon_font, fill=255)
 
 
+def getOutput(cmd: str) -> str:
+    return check_output(
+        cmd,
+        shell=True,
+        encoding="utf-8",
+    )
+
+
+# The total memory is constant, so we can fetch it only once
+MemTotal = getOutput(
+    "cat /proc/meminfo | head -n 1 | awk -v CONVFMT='%.0f' '{printf $2/1000000}'"
+)
+
+
 while True:
     while start < current < end:
         current = int(datetime.now().time().strftime("%H"))
@@ -105,62 +113,59 @@ while True:
         # Draw a black filled box to clear the image.
         draw.rectangle((0, 0, oled.width, oled.height), fill=0)
 
-        IP = check_output(
-            "ip addr | awk '/inet / { print $2 }' | sed -n '2{p;q}' | cut -d '/' -f1",
-            shell=True,
+        IP = getOutput(
+            "ip addr | awk '/inet / { print $2 }' | sed -n '2{p;q}' | cut -d '/' -f1"
         )
 
         # Takes a second to fetch for accurate cpu usage in %
-        CPU = check_output(
-            "vmstat 4 2 | tail -1 | awk '{print 100-$15}' | tr -d '\n'", shell=True
+        CPU = getOutput(
+            "vmstat 4 2 | tail -1 | awk '{print 100-$15}' | tr -d '\n'",
         )
 
-        MemUse = check_output(
-            "free -m | awk 'NR==2{printf $3}'| awk '{printf $1/1000}'", shell=True
+        MemUse = getOutput(
+            "free -m | awk 'NR==2{printf $3}'| awk '{printf $1/1000}'",
         )
 
-        # TODO: check if I can use the MemTotal variable from above instead of running the command again
-        MemUsePercent = check_output(
-            "free -m | awk -v CONVFMT='%.1f' 'NR==2{printf $3*100/$2}'", shell=True
-        )
+        # MemUsePercent = getOutput(
+        #     "free -m | awk -v CONVFMT='%.1f' 'NR==2{printf $3*100/$2}'"
+        # )
+        MemUsePercent = format((float(MemUse) * 100) / float(MemTotal), ".1f")
 
         # TODO: disk is also something we don't need to fetch every time
-        Disk = check_output('df -h | awk \'$NF=="/"{printf "%s", $5}\'', shell=True)
+        Disk = getOutput('df -h | awk \'$NF=="/"{printf "%s", $5}\'')
 
         # TODO: update can be done every minute
-        uptime = check_output(
-            "uptime | awk '{print $3,$4}' | cut -f1 -d','", shell=True
-        )
+        uptime = getOutput("uptime | awk '{print $3,$4}' | cut -f1 -d','")
 
-        temperature = check_output(
-            "cat /sys/class/thermal/thermal_zone*/temp | awk -v CONVFMT='%.1f' '{printf $1/1000}'",
-            shell=True,
+        temperature = getOutput(
+            "cat /sys/class/thermal/thermal_zone*/temp | awk -v CONVFMT='%.1f' '{printf $1/1000}'"
         )
 
         draw_icons()
 
         # Pi Stats Display, printed from left to right each line
-        draw.text(
-            (22, 0), str(IP, "utf-8"), font=font, fill=255
-        )  # x y followed by the content to be printed on the display followed by how it should be printed
-        draw.text((22, 16), str(CPU, "utf-8") + "%", font=font, fill=255)
+        # x y followed by the content to be printed on the display followed by how it should be printed
+        draw.text((22, 0), IP, font=font, fill=255)
+        draw.text((22, 16), CPU + "%", font=font, fill=255)
+
+        # anchor basically refers to printing right to left: https://pillow.readthedocs.io/en/stable/handbook/text-anchors.html#specifying-an-anchor
         draw.text(
             (107, 16),
-            str(temperature, "utf-8") + "°C",
-            font=font,
-            fill=255,
-            anchor="ra",
-        )  # anchor basically refers to printing right to left: https://pillow.readthedocs.io/en/stable/handbook/text-anchors.html#specifying-an-anchor
-        draw.text((22, 32), str(MemUsePercent, "utf-8") + "%", font=font, fill=255)
-        draw.text(
-            (125, 32),
-            str(MemUse, "utf-8") + "/" + str(MemTotal, "utf-8") + "G",
+            temperature + "°C",
             font=font,
             fill=255,
             anchor="ra",
         )
-        draw.text((22, 48), str(Disk, "utf-8"), font=font, fill=255)
-        draw.text((107, 48), str(uptime, "utf-8"), font=font, fill=255, anchor="ra")
+        draw.text((22, 32), MemUsePercent + "%", font=font, fill=255)
+        draw.text(
+            (125, 32),
+            MemUse + "/" + MemTotal + "G",
+            font=font,
+            fill=255,
+            anchor="ra",
+        )
+        draw.text((22, 48), Disk, font=font, fill=255)
+        draw.text((107, 48), uptime, font=font, fill=255, anchor="ra")
 
         # Display image
         oled.image(image)
